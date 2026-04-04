@@ -1,0 +1,41 @@
+"""
+Each config file represents a single routing Daemon, each one in a network needs its own in accordance with the assignment spec
+
+Each line represents a different field.
+multiple entries within a field are space-separated. ' '
+multiple values within an entry are represented within tuples. (v1, v2, ..., vn)
+end of line (and therefore, field) indicated by semicolon. ';'
+    anything after a semicolon on the same line will be ignored and can be used for comments.
+    
+lines that do not start with one of {id, inports, outports, args} will be ignored.
+    additional fields after args will be ignored
+    absent fields (except args) will throw a FieldNotFoundError.
+    fields must be in the above order or will throw a FieldNotFoundError.
+
+id must be an integer between 1, 64000 incl. must be unique in a network.
+Must have only one entry, additional entries will throw an IndexError.
+
+inports must be integer entries between 1024, 64000 incl. There must be one entry for each neighbour the router has.
+There may be arbitrarily many entries, but no fewer than 1.
+
+outports must be 3-tuple entries of the form (portnum, cost, otherID) where
+portnum meets the same standards as for the inport field,
+cost is a positive integer representing the cost of using the link with this neighbour,
+otherID is the id field of the neighbour.
+
+args is a miscellaneous field that can accept entries of any type and in any quantity.
+The first entry is expected to be an initial timer value for when to send periodic updates.
+Functionality will have to be manually implemented if other use cases are desired.
+
+All entries for a field must be on the same line.
+All port numbers must be file-unique. There can be no duplicates in the union of inports and outports.
+    This will be checked and a ValueError thrown if duplicates found.
+Note: No network-wide checks are performed, it's up to the network admin to ensure that:
+    A) No two routers have the same id field.
+    B) Every inport exists in 1 other router's outport field.
+"""
+
+id x0;
+inports i1 i2 ... in;
+outports (o1, c1, x1) (o2, c2, x2) ... (om, cm, xm);
+args a1 a2 ... al;
