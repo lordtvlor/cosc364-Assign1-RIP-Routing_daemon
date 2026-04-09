@@ -1,4 +1,5 @@
 from FieldNotFoundError import FieldNotFoundError
+from isFloat import isFloat
 import sys
 
 def getFilename():
@@ -15,7 +16,7 @@ def removeComments(lines):
         line.lstrip()
         lineEnds = line.find(';')
         line = line[:lineEnds]
-        if (len(line) > 4) and (lineEnds != -1):   #len("id x") == 4 ==> all other lines longer
+        if (len(line) > 3) and (lineEnds != -1):   #len("id x") == 3 ==> all other lines longer
             importantLines.append(line)
     return importantLines
 
@@ -31,9 +32,9 @@ def extractData(lines):
     elif idLine[0] != "id":
         raise FieldNotFoundError("id")
     else:
+        idLine[1] = int(idLine[1])
         rangeCheck(idLine[1], 1, 64000, "ID")
-        data['id'] = int(idLine[1])
-
+        data['id'] = idLine[1]
 
     inportLine = lines[1].split()
     inports = []
@@ -60,7 +61,15 @@ def extractData(lines):
         argsLine = lines[3].split()
         data['args'] = [int(argsLine[1])]
         for arg in argsLine[2:]:
-            data['args'].append(arg)
+            if arg.isdigit():
+                data['args'].append(int(arg))
+
+            elif isFloat(arg):
+                data['args'].append(float(arg))
+
+            arg.strip("'")
+            if arg.isalpha():
+                data['args'].append(str(arg))
 
     return data
 
@@ -75,5 +84,15 @@ class RoutingDaemon:
         self.outports = data['outports']
         self.args = data['args']
 
+    def __repr__(self):
+        return(f"RoutingDaemon {self.id!r}, "
+               f"inports {self.inports!r}, "
+               f"outports {self.outports!r}, "
+               f"args {self.args!r}")
+
+
+
+
 if __name__ == '__main__':
     daemon = RoutingDaemon()
+    print(daemon)

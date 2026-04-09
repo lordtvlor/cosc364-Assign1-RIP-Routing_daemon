@@ -18,6 +18,7 @@ Must have only one entry, additional entries will throw an IndexError.
 
 inports must be integer entries between 1024, 64000 incl. There must be one entry for each neighbour the router has.
 There may be arbitrarily many entries, but no fewer than 1.
+By convention, try to use portnumbers that start with the id of the relevant router (not enforced, just helpful for avoiding conflicts)
 
 outports must be 3-tuple entries of the form (portnum,cost,otherID) where
 portnum meets the same standards as for the inport field,
@@ -26,6 +27,7 @@ otherID is the id field of the neighbour.
 It's very important that the 3-tuples contain no whitespace, after the comma or anywhere else.
 
 args is a miscellaneous field that can accept entries of any type and in any quantity.
+Do not use double quotes to indicate a string. Instead, either use singles or none at all.
 The first entry is expected to be an initial timer value for when to send periodic updates.
 Functionality will have to be manually implemented if other use cases are desired.
 
@@ -39,5 +41,5 @@ Note: No network-wide checks are performed, it's up to the network admin to ensu
 
 id x0;
 inports i1 i2 ... in;
-outports (o1,c1,x1) (o2,c2,x2) ... (om,cm,xm);
-args a1 a2 ... al;
+outports (o1,c1,x1) (o2,c2,x2) ... (on,cn,xn);
+args a1 a2 ... am;
