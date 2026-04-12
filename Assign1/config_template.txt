@@ -1,4 +1,3 @@
-"""
 Each config file represents a single routing Daemon, each one in a network needs its own in accordance with the assignment spec
 
 Each line represents a different field.
@@ -26,8 +25,8 @@ cost is a positive integer representing the cost of using the link with this nei
 otherID is the id field of the neighbour.
 It's very important that the 3-tuples contain no whitespace, after the comma or anywhere else.
 
-args is a miscellaneous field that can accept entries of any type and in any quantity.
-Do not use double quotes to indicate a string. Instead, either use singles or none at all.
+args is a miscellaneous field that can accept entries of types int, float, and string in any quantity.
+strings should not be indicated with quote marks, they will get included as part of the arg.
 The first entry is expected to be an initial timer value for when to send periodic updates.
 Functionality will have to be manually implemented if other use cases are desired.
 
@@ -37,9 +36,16 @@ All port numbers must be file-unique. There can be no duplicates in the union of
 Note: No network-wide checks are performed, it's up to the network admin to ensure that:
     A) No two routers have the same id field.
     B) Every inport exists in one (1) other router's outport field.
-"""
 
-id x0;
+
+General Construction Template:
+id x0; Comments can be made after a semicolon
 inports i1 i2 ... in;
 outports (o1,c1,x1) (o2,c2,x2) ... (on,cn,xn);
 args a1 a2 ... am;
+
+Example Functional Config File:
+id 1;
+inports 1024 1025 1026;
+outports (2024,1,2) (6024,5,6) (7024,8,7);
+args 23;

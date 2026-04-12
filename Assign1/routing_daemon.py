@@ -46,7 +46,9 @@ def extractData(lines):
             rangeCheck(inport, 1024, 64000, "Inports")
             inports.append(inport)
     data['inports'] = inports
+
     outportLine = lines[2].split()
+    outports = []
     if outportLine[0] != "outports":
         raise FieldNotFoundError("outports")
     else:
@@ -56,7 +58,8 @@ def extractData(lines):
             rangeCheck(int(portnum), 1024, 64000, "Outport portnum")
             rangeCheck(int(cost), 0, float('inf'), "Cost")
             rangeCheck(int(otherId), 1, 64000, "Other ID")
-            data['outports'] = (int(portnum), int(cost), int(otherId))
+            outports.append((int(portnum), int(cost), int(otherId)))
+    data['outports'] = outports
 
     if len(lines) > 3 :
         argsLine = lines[3].split()
@@ -68,9 +71,7 @@ def extractData(lines):
             elif isFloat(arg):
                 data['args'].append(float(arg))
 
-            arg.strip("'")
-            if arg.isalpha():
-                data['args'].append(str(arg))
+            data['args'].append(arg)
 
     return data
 
