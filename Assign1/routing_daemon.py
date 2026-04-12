@@ -38,16 +38,17 @@ def extractData(lines):
 
     inportLine = lines[1].split()
     inports = []
-    if inportLine[0] != "inport":
-        raise FieldNotFoundError("inport")
+    if inportLine[0] != "inports":
+        raise FieldNotFoundError("inports")
     else:
         for inport in inportLine[1:]:
-            rangeCheck(inport, 1024, 64000, "Inport")
-            inports.append(int(inport))
+            inport = int(inport)
+            rangeCheck(inport, 1024, 64000, "Inports")
+            inports.append(inport)
     data['inports'] = inports
     outportLine = lines[2].split()
-    if outportLine[0] != "outport":
-        raise FieldNotFoundError("outport")
+    if outportLine[0] != "outports":
+        raise FieldNotFoundError("outports")
     else:
         for outport in outportLine[1:]:
             outport = outport[1:-1]
@@ -86,9 +87,9 @@ class RoutingDaemon:
 
     def __repr__(self):
         return(f"RoutingDaemon {self.id!r}, "
-               f"inports {self.inports!r}, "
-               f"outports {self.outports!r}, "
-               f"args {self.args!r}")
+               f"inports: {self.inports!r}, "
+               f"outports: {self.outports!r}, "
+               f"args: {self.args!r}")
 
 
 
