@@ -83,14 +83,24 @@ class RoutingDaemon:
         data = extractData(contents)
         self.id = data['id']
         self.inports = data['inports']
-        self.outports = data['outports']
+        self.outportsData = data['outports']
         self.args = data['args']
+        self.forwardTable = {}
+        self.costsTable = {}
+        self.outports = {}
+        self.assembleFirstTables()
 
     def __repr__(self):
         return(f"RoutingDaemon {self.id!r}, "
                f"inports: {self.inports!r}, "
                f"outports: {self.outports!r}, "
                f"args: {self.args!r}")
+
+    def assembleFirstTables(self):
+        for portnum, cost, targetId in self.outportsData:
+            self.forwardTable[targetId] = targetId    #next hop for connected routers is via that router
+            self.costsTable[targetId] = cost
+            self.outports[targetId] = portnum
 
 
 
