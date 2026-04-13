@@ -1,6 +1,9 @@
 from FieldNotFoundError import FieldNotFoundError
 from isFloat import isFloat
 import sys
+import socket
+
+HOST = '127.0.0.1'
 
 def getFilename():
     return sys.argv[1]
@@ -97,10 +100,19 @@ class RoutingDaemon:
                f"args: {self.args!r}")
 
     def assembleFirstTables(self):
+        """Necessarily calls openPort to receive socket objects to put in the outports table"""
         for portnum, cost, targetId in self.outportsData:
             self.forwardTable[targetId] = targetId    #next hop for connected routers is via that router
             self.costsTable[targetId] = cost
-            self.outports[targetId] = portnum
+            self.outports[targetId] = self.openPort(portnum)
+
+    def openPort(self, portnum):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind((HOST, portnum))
+            print(f"Socket bound to {HOST}:{portnum}")
+        except socket.error as msg:
+            print(f"Socket Bind failed. Error: {msg}")
 
 
 
