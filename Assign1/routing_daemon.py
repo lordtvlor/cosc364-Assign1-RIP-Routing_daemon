@@ -5,8 +5,7 @@ import socket
 
 HOST = '127.0.0.1'
 
-def getFilename():
-    return sys.argv[1]
+getFilename = lambda: sys.argv[1]
 
 def readFile(filename):
     with open(filename) as f:
@@ -70,12 +69,11 @@ def extractData(lines):
         for arg in argsLine[2:]:
             if arg.isdigit():
                 data['args'].append(int(arg))
-
+                continue
             elif isFloat(arg):
                 data['args'].append(float(arg))
-
+                continue
             data['args'].append(arg)
-
     return data
 
 class RoutingDaemon:
@@ -102,39 +100,58 @@ class RoutingDaemon:
         self.neighbourToInport = {}     #maps neighbour Ids to their respective INPORT number
         self.neighbourToOutport = {}    #maps neighbour Ids to their respective OUTPORT number
         self.mapPorts()
-
-        self.nextHop = {}
+        #Tracks known cost to a Target Id as well as the Router Id for the next hop
+        self.routingTable = {Id: (cost, Id) for _, cost, Id in self.fileOutports}
 
     def bindInports(self):
         for inport in self.fileInports:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.bind((HOST, inport))
-            s.listen()
             self.inports.append(s)
 
     def mapPorts(self):
         i = 0
-        for portnum, cost, neighborId in self.fileOutports:
+        for portnum, _, neighborId in self.fileOutports:
             self.neighbourToInport[neighborId] = self.fileInports[i]
             self.neighbourToOutport[neighborId] = (HOST, portnum)
             i += 1
 
+    def updateNeghbour(self, neighbourId):
+        data = {}
+        for dest in self.routingTable.keys():
+            if self.routingTable[dest][1] != neighbourId:
+                data[dest] = self.routingTable[dest][0]
+            else:
+                #poisoned reverse, set cost to infinity if path goes through the neighbour we're updating
+                #(They already have the rest of the path anyway)
+                data[dest] = float('inf')
+        self.send(neighbourId, data)
+
+    def send(self, TargetId, data):
+        self.outputSocket.sendto(data, self.neighbourToOutport[self.routingTable[TargetId][1]])
+
     def recieve(self):
         for sock in self.inports:
             data, addr = sock.recvfrom(1024)
-            local_port = sock.getsockname()[1]
-            neighbour_id = None
-            for nid, port in self.neighbourToInport.items():
-                if port == local_port:
-                    neighbour_id = nid
+            localPort = sock.getsockname()[1]
+            neighbourId = None
+            for NId, port in self.neighbourToInport.items():
+                if port == localPort:
+                    neighbourId = NId
                     break
 
-        return data, neighbour_id
+        return data, neighbourId
 
-    def send(self, TargetId, data):
-        toPort = self.nextHop[TargetId]
-        host, port = self.neighbourToOutport[toPort]
-        self.outputSocket.sendto(data, (host, port))
+    def updateRoutingTable(self, data, neighbourId):
+        neighbourCost = self.routingTable[neighbourId][0]
+        for dest, cost in data.items():
+            newCost = cost + neighbourCost
+            if dest not in self.routingTable or newCost < self.routingTable[dest][0]:
+                self.routingTable[dest] = (newCost, neighbourId)
+
+            elif self.routingTable[dest][1] == neighbourId and newCost != self.routingTable[dest][0]:
+                #edge case: if route to a target goes through N and N's cost changes -> change our cost accordingly
+                self.routingTable[dest] = (newCost, neighbourId)
 
 
 
