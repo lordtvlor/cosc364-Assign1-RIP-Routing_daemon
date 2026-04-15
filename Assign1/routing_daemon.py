@@ -79,40 +79,62 @@ def extractData(lines):
     return data
 
 class RoutingDaemon:
+    def __repr__(self):
+        return(f"RoutingDaemon {self.id!r}, "
+               f"inports: {self.fileInports!r}, "
+               f"outports: {self.fileOutports!r}, "
+               f"args: {self.fileArgs!r}")
+
     def __init__(self):
         filename = getFilename()
         contents = readFile(filename)
         contents = removeComments(contents)
         data = extractData(contents)
         self.id = data['id']
-        self.inports = data['inports']
-        self.outportsData = data['outports']
-        self.args = data['args']
-        self.forwardTable = {}
-        self.costsTable = {}
-        self.outports = {}
-        self.assembleFirstTables()
+        self.fileInports = data['inports']
+        self.fileOutports = data['outports']
+        self.fileArgs = data['args']
 
-    def __repr__(self):
-        return(f"RoutingDaemon {self.id!r}, "
-               f"inports: {self.inports!r}, "
-               f"outports: {self.outports!r}, "
-               f"args: {self.args!r}")
+        self.inports = []
+        self.bindInports()
+        self.outputSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    def assembleFirstTables(self):
-        """Necessarily calls openPort to receive socket objects to put in the outports table"""
-        for portnum, cost, targetId in self.outportsData:
-            self.forwardTable[targetId] = targetId    #next hop for connected routers is via that router
-            self.costsTable[targetId] = cost
-            self.outports[targetId] = self.openPort(portnum)
+        self.neighbourToInport = {}     #maps neighbour Ids to their respective INPORT number
+        self.neighbourToOutport = {}    #maps neighbour Ids to their respective OUTPORT number
+        self.mapPorts()
 
-    def openPort(self, portnum):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.bind((HOST, portnum))
-            print(f"Socket bound to {HOST}:{portnum}")
-        except socket.error as msg:
-            print(f"Socket Bind failed. Error: {msg}")
+        self.nextHop = {}
+
+    def bindInports(self):
+        for inport in self.fileInports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.bind((HOST, inport))
+            s.listen()
+            self.inports.append(s)
+
+    def mapPorts(self):
+        i = 0
+        for portnum, cost, neighborId in self.fileOutports:
+            self.neighbourToInport[neighborId] = self.fileInports[i]
+            self.neighbourToOutport[neighborId] = (HOST, portnum)
+            i += 1
+
+    def recieve(self):
+        for sock in self.inports:
+            data, addr = sock.recvfrom(1024)
+            local_port = sock.getsockname()[1]
+            neighbour_id = None
+            for nid, port in self.neighbourToInport.items():
+                if port == local_port:
+                    neighbour_id = nid
+                    break
+
+        return data, neighbour_id
+
+    def send(self, TargetId, data):
+        toPort = self.nextHop[TargetId]
+        host, port = self.neighbourToOutport[toPort]
+        self.outputSocket.sendto(data, (host, port))
 
 
 
