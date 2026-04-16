@@ -1,6 +1,7 @@
-id 1;
-inports 1102 1106 1107;testing the comment removal here
+id 1;testing the comment removal here
 ; Here as well
-outports (2101,1,2) (6101,5,6) (7101,8,7);      should check blanklines, too
+inports 1102 1106 1107; Notice how port numbers start with the local router id and end with the connected router id
+outports (2101,1,2) (6101,5,6) (7101,8,7); That should mean neither double-ups nor orphans occur
+ ;    should check blanklines, too
 
 args 20 6.2 f;
