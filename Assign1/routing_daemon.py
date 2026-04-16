@@ -2,6 +2,7 @@ from FieldNotFoundError import FieldNotFoundError
 from isFloat import isFloat
 import sys
 import socket
+import struct
 
 HOST = '127.0.0.1'
 
@@ -116,6 +117,50 @@ class RoutingDaemon:
             self.neighbourToOutport[neighborId] = (HOST, portnum)
             i += 1
 
+    def encodePacket(self, data):
+        packet = bytearray()
+        packet += struct.pack(
+            'BBH', #Format string (1byte, 1byte, 2bytes)
+            2,      #Command Field
+            2,          #Version field
+            self.id)    #Replace the zeroed bytes with source id
+        for dest, cost in data:
+            packet += struct.pack(
+                'HHIIII',   #2, 2, 4, 4, 4, 4 = 20
+                2,  #Addr Family Identifier
+                0,      #Must be Zeros (MB0)
+                dest,   #IPV4 Field, repurposed to hold the destination router ids
+                0,      #MB0
+                0,      #MB0
+                cost    #Metric Field, holds the cost of traversal
+            )
+
+        return packet
+
+    def decodePacket(self, packet):
+        """Put inside a try/catch block to drop invalid packets - a ValueError will be raised."""
+        offset = 0
+        command, version, sourceId = struct.unpack_from('BBH', packet, offset)    #Unpack Header
+        offset += 4
+        if command != 2:
+            raise ValueError("Update Packet Command Number must be 2.")
+        if version != 2:
+            raise ValueError("Update Packet Version Number must be 2.")
+
+        data = {}
+        while offset + 20 < len(packet):
+            afi, twoZeros, dest, fourZeros1, fourZeros2, cost = struct.unpack_from('HHIIII', packet, offset)
+            offset += 20
+            if afi != 2:
+                #invalid entry, ignore it
+                continue
+            if not (1 <= cost <= 16):
+                #invalid entry, ignore it
+                continue
+            data[dest] = cost
+
+        return data, sourceId
+
     def updateNeghbour(self, neighbourId):
         data = {}
         for dest in self.routingTable.keys():
@@ -125,7 +170,8 @@ class RoutingDaemon:
                 #poisoned reverse, set cost to infinity if path goes through the neighbour we're updating
                 #(They already have the rest of the path anyway)
                 data[dest] = float('inf')
-        self.send(neighbourId, data)
+        packet = self.encodePacket(data)
+        self.send(neighbourId, packet)
 
     def send(self, TargetId, data):
         self.outputSocket.sendto(data, self.neighbourToOutport[self.routingTable[TargetId][1]])
