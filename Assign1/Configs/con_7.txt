@@ -1,4 +1,4 @@
 id 7;
 inports 7101 7104;
 outports (1107,8,1) (4107,6,4);
-args 20;
+args 10;

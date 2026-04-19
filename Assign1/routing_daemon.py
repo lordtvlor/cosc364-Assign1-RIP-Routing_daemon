@@ -1,93 +1,26 @@
-from FieldNotFoundError import FieldNotFoundError
 import UtilityFunctions as UF
-import sys
 import socket
 import struct
 import select
 import time
+import random
 
 HOST = '127.0.0.1'
 INF = 16
 
-getFilename = lambda: sys.argv[1]
-
-def readFile(filename):
-    with open(filename) as f:
-        lines = f.read().splitlines() #doing this instead of using readlines() means \n chars are automatically removed
-    return lines
-
-def removeComments(lines):
-    importantLines = []
-    for line in lines:
-        line.lstrip()
-        lineEnds = line.find(';')
-        line = line[:lineEnds]
-        if (len(line) > 3) and (lineEnds != -1):   #len("id x") == 3 ==> all other lines longer
-            importantLines.append(line)
-    return importantLines
-
-def extractData(lines):
-    data = {}
-    idLine = lines[0].split()
-    if len(idLine) > 2:
-        raise IndexError("There are too many indices for this field.")
-    elif idLine[0] != "id":
-        raise FieldNotFoundError("id")
-    else:
-        idLine[1] = int(idLine[1])
-        UF.rangeCheck(idLine[1], 1, 64000, "ID")
-        data['id'] = idLine[1]
-
-    inportLine = lines[1].split()
-    inports = []
-    if inportLine[0] != "inports":
-        raise FieldNotFoundError("inports")
-    else:
-        for inport in inportLine[1:]:
-            inport = int(inport)
-            UF.rangeCheck(inport, 1024, 64000, "Inports")
-            inports.append(inport)
-    data['inports'] = inports
-
-    outportLine = lines[2].split()
-    outports = []
-    if outportLine[0] != "outports":
-        raise FieldNotFoundError("outports")
-    else:
-        for outport in outportLine[1:]:
-            outport = outport[1:-1]
-            portnum, cost, otherId = outport.split(',')
-            UF.rangeCheck(int(portnum), 1024, 64000, "Outport portnum")
-            UF.rangeCheck(int(cost), 0, INF, "Cost")
-            UF.rangeCheck(int(otherId), 1, 64000, "Other ID")
-            outports.append((int(portnum), int(cost), int(otherId)))
-    data['outports'] = outports
-
-    if len(lines) > 3 :
-        argsLine = lines[3].split()
-        data['args'] = [int(argsLine[1])]
-        for arg in argsLine[2:]:
-            if arg.isdigit():
-                data['args'].append(int(arg))
-                continue
-            elif UF.isFloat(arg):
-                data['args'].append(float(arg))
-                continue
-            data['args'].append(arg)
-    return data
-
 class RoutingDaemon:
     def __repr__(self):
-        return(f"RoutingDaemon {self.id!r}, "
-               f"inports: {self.fileInports!r}, "
-               f"outports: {self.fileOutports!r}, "
-               f"args: {self.fileArgs!r}")
+        self_str = f"ID {self.id!r}:\n"
+        for target, (cost, nextHop) in self.routingTable.items():
+            cost = cost if cost < INF else "INF"
+            self_str += f"{target} via {nextHop} for cost {cost}\n"
+        return self_str
 
     def __init__(self):
-        filename = getFilename()
-        contents = readFile(filename)
-        contents = removeComments(contents)
-        data = extractData(contents)
+        filename = UF.getFilename()
+        contents = UF.readFile(filename)
+        contents = UF.removeComments(contents)
+        data = UF.extractData(contents)
         self.id = data['id']
         self.fileInports = data['inports']
         self.fileOutports = data['outports']
@@ -100,10 +33,20 @@ class RoutingDaemon:
         self.neighbourToInport = {}     #maps neighbour Ids to their respective INPORT number
         self.neighbourToOutport = {}    #maps neighbour Ids to their respective OUTPORT number
         self.mapPorts()
-        #Tracks known cost to a Target Id as well as the Router Id for the next hop
-        self.routingTable = {id: (cost, id) for _, cost, id in self.fileOutports}
 
-        self.lastHeard = {id: time.time() for _, __, id in self.fileOutports}
+        self.routingTable = {}
+        self.linkCosts = {}
+        self.lastHeard = {}
+        now = time.time()
+        self.routingTable[self.id] = (0, self.id)
+        for _, cost, nid in self.fileOutports:
+            #Tracks known cost to a Target Id as well as the Router Id for the next hop
+            self.routingTable[nid] = (cost, nid)
+            #Tracks the original costs for neighbours, so they aren't lost if the router goes offline
+            self.linkCosts[nid] = cost
+
+            self.lastHeard[nid] = now
+
         self.run()
 
     def bindInports(self):
@@ -126,7 +69,8 @@ class RoutingDaemon:
             2,      #Command Field
             2,          #Version field
             self.id)    #Replace the zeroed bytes with source id
-        for dest, cost in data:
+        for dest, cost in data.items():
+            cost = INF if cost >= INF else cost
             packet += struct.pack(
                 'HHIIII',   #2, 2, 4, 4, 4, 4 = 20
                 2,  #Addr Family Identifier
@@ -150,99 +94,121 @@ class RoutingDaemon:
             raise ValueError("Update Packet Version Number must be 2.")
 
         data = {}
-        while offset + 20 < len(packet):
+        while offset + 20 <= len(packet):
             afi, twoZeros, dest, fourZeros1, fourZeros2, cost = struct.unpack_from('HHIIII', packet, offset)
             offset += 20
             if afi != 2:
                 #invalid entry, ignore it
                 continue
-            if not UF.rangeCheck(cost, 0, INF):
+            if not UF.rangeCheck(cost, 1, INF):
                 #invalid entry, ignore it
                 continue
+
+            cost = INF if cost >= INF else cost
             data[dest] = cost
 
         return data, sourceId
 
-    def updateNeghbour(self, neighbourId):
+    def updateNeighbour(self, neighbourId):
         data = {}
-        for dest in self.routingTable.keys():
+        for dest in self.routingTable:
             if self.routingTable[dest][1] != neighbourId:
                 data[dest] = self.routingTable[dest][0]
             else:
                 #poisoned reverse, set cost to infinity if path goes through the neighbour we're updating
                 #(They already have the rest of the path anyway)
                 data[dest] = INF
-        packet = self.encodePacket(data)
-        self.send(neighbourId, packet)
+        self.send(neighbourId, data)
 
     def send(self, TargetId, data):
-        self.outputSocket.sendto(self.encodePacket(data), self.neighbourToOutport[self.routingTable[TargetId][1]])
+        if TargetId in self.neighbourToOutport:
+            #direct connection
+            nextHop = self.neighbourToOutport[TargetId]
+        else:
+            #find the relevant neighbour
+            nextHop = self.neighbourToOutport[self.routingTable[TargetId][1]]
+        self.outputSocket.sendto(self.encodePacket(data), nextHop)
 
-    def updateRoutingTable(self, data, neighbourId):
-        changed = False
-        neighbourCost = self.routingTable[neighbourId][0]
+    def updateRoutes(self, data, sourceId):
+        linkCost = self.linkCosts[sourceId]
         for dest, cost in data.items():
-            newCost = cost + neighbourCost
-            if dest not in self.routingTable or newCost < self.routingTable[dest][0]:
-                self.routingTable[dest] = (newCost, neighbourId)
-                changed = True
+            if dest == self.id:
+                #I can already reach me
+                continue
 
-            elif self.routingTable[dest][1] == neighbourId and newCost != self.routingTable[dest][0]:
-                #edge case: if route to a target goes through N and N's cost changes -> change our cost accordingly
-                self.routingTable[dest] = (newCost, neighbourId)
-                changed = True
+            newCost = min(INF, cost + linkCost)
+            if dest not in self.routingTable:
+                #if I don't already have a route there, use this one
+                if newCost < INF:
+                    #assuming it's reachable
+                    self.routingTable[dest] = (newCost, sourceId)
+                    self.changed = True
+                continue
 
-        return changed
+            oldCost, oldNextHop = self.routingTable[dest]
+            if oldNextHop == sourceId and oldCost != newCost:
+                #route already goes through you nd your cost has changed, have to update my cost when you do
+                self.routingTable[dest] = (newCost, sourceId)
+                self.changed = True
+                continue
+
+            if newCost < oldCost:
+                # if the route you've given me is shorter, use it
+                self.routingTable[dest] = (newCost, sourceId)
+                self.changed = True
+                continue
+
+    def shutdown(self, *args):
+        self.isRunning = False
 
     def run(self):
-        updateInterval = self.fileArgs[0]
-        neighbourDeathTime = 3 * updateInterval
+        baseUpdateTime = self.fileArgs[0]
+        desync = baseUpdateTime * 0.1
+
+        updateInterval = baseUpdateTime + random.uniform(-desync, desync)
+        neighbourDeathTime = 3 * baseUpdateTime
         lastUpdateTime = time.time()
 
-        while 1:
+        self.isRunning = True
+        while self.isRunning:
+            self.changed = False
+            self.topoChanged = False
             now = time.time()
-            readable, _, _ = select.select(self.input_sockets, [], [], 1.0)
+
+            readable, _, _ = select.select(self.inports, [], [], 1)
             for sock in readable:
-                packet, addr = sock.recvfrom(1024)
+                packet, _ = sock.recvfrom(1024)
                 try:
                     data, sourceId = self.decodePacket(packet)
                 except ValueError:
                     print(f"bad packet received at time {now}")
                     continue
 
-                self.lastHeard[sourceId] = now  #register the neighbour as alive
-                changed = self.updateRoutingTable(data, sourceId)
-                if changed:
-                    #Trigger Update
-                    for id in self.neighbourToOutport.keys():
-                        self.updateNeghbour(id)
-                        lastUpdateTime = now
+                if sourceId not in self.lastHeard:
+                    #it had been offline, but is now clearly not, so reassert its direct connection
+                    self.routingTable[sourceId] = (self.linkCosts[sourceId], sourceId)
 
-            if now - lastUpdateTime > updateInterval:
-                #Periodic Update
-                for id in self.neighbourToOutport.keys():
-                    self.updateNeghbour(id)
-                    lastUpdateTime = now
+                self.lastHeard[sourceId] = now
+                self.updateRoutes(data, sourceId)
 
-            for neighbour in self.lastHeard.keys():
-                changed = False
-                if now - self.lastHeard[neighbour] > neighbourDeathTime:
-                    for dest in self.routingTable.keys():
-                        cost, nextHopId = self.routingTable[dest]
-                        if nextHopId == neighbour:
-                            self.routingTable[dest] = (INF, nextHopId)
-                            del self.lastHeard[neighbour]
-                            changed = True
+            timedOut = set()
+            for nid in list(self.lastHeard):
+                if now - self.lastHeard[nid] > neighbourDeathTime:
+                    for dest, (_, nextHop) in self.routingTable.items():
+                        if nextHop == nid:
+                            timedOut.add(nid)
+                            self.routingTable[dest] = (INF, self.routingTable[dest][1])
+                            self.topoChanged = True
 
-                if changed:
-                    #Neighbour Timeout Update
-                    for id in self.neighbourToOutport.keys():
-                        self.updateNeghbour(id)
-                        lastUpdateTime = now
+            for nid in timedOut:
+                del self.lastHeard[nid]
 
-
+            if self.changed or self.topoChanged or now - lastUpdateTime > updateInterval:
+                for neighbour in self.neighbourToOutport:
+                    self.updateNeighbour(neighbour)
+                lastUpdateTime = now
+                print(self)
 
 
 if __name__ == '__main__':
     daemon = RoutingDaemon()
-    print(daemon)
