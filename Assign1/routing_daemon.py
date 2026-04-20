@@ -166,7 +166,7 @@ class RoutingDaemon:
         desync = baseUpdateTime * 0.1
 
         updateInterval = baseUpdateTime + random.uniform(-desync, desync)
-        neighbourDeathTime = 3 * baseUpdateTime
+        neighbourDeathTime = 6 * baseUpdateTime
         lastUpdateTime = time.time()
 
         self.isRunning = True
