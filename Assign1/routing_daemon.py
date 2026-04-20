@@ -210,5 +210,5 @@ class RoutingDaemon:
                 print(self)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     daemon = RoutingDaemon()

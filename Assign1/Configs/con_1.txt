@@ -5,3 +5,14 @@ outports (2101,1,2) (6101,5,6) (7101,8,7); That should mean neither double-ups n
  ;    should check blanklines, too
 
 args 5 6.2 f;
+
+and check extra lines at the end, with and w/out semicolons
+
+Praise be to The Machine Gods;
+May my code run as expected;
+May my program meet scope;
+May the difference in operating system have no impact;
+We all are yours;
+Your divine touch is requested;
+Your mercy not expected;
+Praise be to The Machine Gods
